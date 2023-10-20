@@ -22,5 +22,6 @@ class pickle:
         # Save the face data to a file using pickle
         with open('face_data.pkl', 'wb') as f:
             pickle.dump(face_data, f)
+        print("image have been dumped in pickle file")
 
    
