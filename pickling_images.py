@@ -17,11 +17,14 @@ class pickle:
             face_data[stu_name]=face_encoding
 
             print(stu_name," added to image pickle file")
+            print(' ')
            
 
         # Save the face data to a file using pickle
         with open('face_data.pkl', 'wb') as f:
             pickle.dump(face_data, f)
         print("image have been dumped in pickle file")
+        print('')
+        print('')
 
    
