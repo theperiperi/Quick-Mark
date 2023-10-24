@@ -8,7 +8,7 @@ class Pickle:
         t = int(input("Enter the number of students to put into the image reference database file: "))
         for i in range(t):
             stu_name = input(f"Enter the name of student {i+1} whose image must be imported: ")
-            imag_path = stu_name + ".jpg"
+            imag_path = "C:\\Users\\pri\\Desktop\\"+ stu_name + ".jpg"
 
             s_image = face_recognition.load_image_file(imag_path)
             face_encoding = face_recognition.face_encodings(s_image)[0]
