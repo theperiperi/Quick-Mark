@@ -23,7 +23,8 @@ class AttendanceApp(tk.Tk):
 
     def mark_attendance(self):
         messagebox.showinfo("Attendance System", "Attendance started. Press 'q' to stop.")
-        Attendance.mark_attendance()
+        attendance.first()
+        
 
     def view_database(self):
         DbShow.view_db()
