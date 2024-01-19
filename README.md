@@ -30,9 +30,9 @@ Ensure you have the following dependencies installed:
 
 1. Launch the application using `python main.py`.
 2. Navigate through the intuitive user interface.
-3. Authenticate attendees using face recognition or QR code scanning.
-4. Attendance data is automatically stored in the database.
-
+3. Authenticate attendee when there is a positive face match and QR positive qr code map for particular user.
+4. Attendance data is automatically stored in the database along with timestamp
+   
 ## Database Schema
 
 The database contains a table named `attendance` with the following structure:
