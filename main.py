@@ -5,6 +5,7 @@ from pyzbar.pyzbar import ZBarSymbol
 import face_recognition
 import pickle
 import sqlite3
+import os
 
 class attend:
     def startprocess():
@@ -21,7 +22,12 @@ class attend:
         conn.close()
 
         # Load face recognition data from the file
-        with open('face_data.pkl', 'rb') as f:
+        pickle_path = os.path.join('pickle_files', 'face_data.pkl')
+        if not os.path.exists(pickle_path):
+            print(f"Error: Pickle file not found at {pickle_path}")
+            return
+
+        with open(pickle_path, 'rb') as f:
             face_data = pickle.load(f)
 
         # Function to capture video from webcam, decode QR codes, perform face recognition, and mark attendance
@@ -82,3 +88,7 @@ class attend:
 
         # Call the mark_attendance function
         mark_attendance()
+
+# Run the attendance system when the script is executed
+if __name__ == "__main__":
+    attend.startprocess()
