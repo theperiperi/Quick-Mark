@@ -16,12 +16,23 @@ QuickMark is an attendance system designed to streamline the attendance tracking
 - **Database Integration:**
   - Stores attendance data in a database for easy maintenance and retrieval.
 
+- **Anti-Spoofing Technology:**
+  - Eye Blink Detection: Ensures the person is real by detecting natural eye blinking.
+  - Head Movement Detection: Verifies liveness through random head movement challenges.
+  - Depth Estimation: Uses MediaPipe to detect flat surfaces like printed photos.
+  - Challenge-Response System: Randomized prompts requiring specific actions to verify presence.
+
 ## Requirements
 
 Ensure you have the following dependencies installed:
 
 ```bash
-pip install face_recognition opencv-python pyzbar qrcode pillow
+pip install face_recognition opencv-python pyzbar qrcode pillow mediapipe numpy
+```
+
+Alternatively, install all requirements:
+```bash
+pip install -r requirements.txt
 ```
 
 ## Setup and Usage
@@ -48,9 +59,11 @@ pip install face_recognition opencv-python pyzbar qrcode pillow
    ```
 2. The system will:
    - Open your webcam
+   - Present random liveness challenges (blink, turn head, etc.)
+   - Analyze facial depth to detect spoofing attempts
    - Scan for QR codes
    - Perform face recognition
-   - Mark attendance when both QR code and face match
+   - Mark attendance only when all verification steps pass
 3. Press 'q' to exit the application
 
 ### 3. Viewing Attendance
@@ -88,6 +101,12 @@ CREATE TABLE attendance (
    - Ensure good lighting
    - Hold the QR code steady
    - Check that the QR code is not damaged
+
+3. If anti-spoofing checks fail:
+   - Make sure there's sufficient lighting for depth detection
+   - Follow the challenge instructions carefully
+   - Ensure your face is clearly visible to the camera
+   - Avoid quick movements that may interfere with tracking
 
 ## Contributions
 
