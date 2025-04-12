@@ -73,21 +73,38 @@ class attend:
             return ear
 
         # Function to detect head movement
-        def detect_head_movement(landmarks, prev_landmarks, threshold=0.02):
+        def detect_head_movement(landmarks, prev_landmarks, threshold=0.01):  # Lowered threshold
             if prev_landmarks is None:
                 return "none"
             
-            # Calculate movement of nose tip (landmark 1)
-            nose_movement_x = landmarks[1].x - prev_landmarks[1].x
-            nose_movement_y = landmarks[1].y - prev_landmarks[1].y
+            # Use multiple stable facial landmarks for more robust movement detection
+            # Nose tip (1), chin (152), left eye corner (33), right eye corner (133)
+            stable_landmarks = [1, 152, 33, 133]
             
-            if abs(nose_movement_x) > threshold:
-                if nose_movement_x > 0:
+            # Calculate average movement across multiple landmarks
+            total_movement_x = 0
+            total_movement_y = 0
+            
+            for landmark_idx in stable_landmarks:
+                total_movement_x += landmarks[landmark_idx].x - prev_landmarks[landmark_idx].x
+                total_movement_y += landmarks[landmark_idx].y - prev_landmarks[landmark_idx].y
+            
+            # Average the movements
+            avg_movement_x = total_movement_x / len(stable_landmarks)
+            avg_movement_y = total_movement_y / len(stable_landmarks)
+            
+            # Apply a minimum movement threshold to reduce false positives
+            min_movement_threshold = 0.003  # Lowered minimum threshold
+            
+            # Detect horizontal movement
+            if abs(avg_movement_x) > threshold and abs(avg_movement_x) > min_movement_threshold:
+                if avg_movement_x > 0:
                     return "right"
                 else:
                     return "left"
-            elif abs(nose_movement_y) > threshold:
-                if nose_movement_y > 0:
+            # Detect vertical movement
+            elif abs(avg_movement_y) > threshold and abs(avg_movement_y) > min_movement_threshold:
+                if avg_movement_y > 0:
                     return "down"
                 else:
                     return "up"
@@ -117,14 +134,20 @@ class attend:
             already_marked = set()  # To prevent duplicate entries
             
             # Variables for challenge-response system
-            current_challenge = None
-            challenge_start_time = None
-            challenge_complete = False
-            challenge_timeout = 10  # seconds
+            current_person = None
+            required_actions = ["left", "right", "nod"]  # Three required actions
+            completed_actions = set()
+            current_action = None
+            action_start_time = None
+            action_complete = False
+            action_timeout = 10  # seconds
             prev_landmarks = None
-            blink_counter = 0
-            blink_threshold = 0.25
-            eye_closed = False
+            movement_complete_time = None
+            movement_complete_duration = 2.0
+            movement_buffer = []
+            buffer_size = 5
+            last_action_time = 0
+            action_cooldown = 2.0  # seconds between actions
             
             while True:
                 _, frame = cap.read()
@@ -135,108 +158,116 @@ class attend:
                 mesh_results = face_mesh.process(rgb_frame)
                 
                 # Variables for liveness detection
-                depth_check_passed = False
-                blink_detected = False
                 head_movement = "none"
                 
                 # If face mesh landmarks are detected
                 if mesh_results.multi_face_landmarks:
                     landmarks = mesh_results.multi_face_landmarks[0].landmark
                     
-                    # Draw face mesh
-                    mp_drawing.draw_landmarks(
-                        frame,
-                        mesh_results.multi_face_landmarks[0],
-                        mp_face_mesh.FACEMESH_CONTOURS,
-                        landmark_drawing_spec=None,
-                        connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style()
-                    )
-                    
-                    # Check depth to detect flat surfaces (printed photos)
-                    depth_check_passed = check_depth(landmarks)
-                    
-                    # Calculate eye aspect ratio for blink detection
-                    left_ear = eye_aspect_ratio(landmarks, LEFT_EYE)
-                    right_ear = eye_aspect_ratio(landmarks, RIGHT_EYE)
-                    ear = (left_ear + right_ear) / 2.0
-                    
-                    # Detect blink
-                    if ear < blink_threshold and not eye_closed:
-                        eye_closed = True
-                    elif ear >= blink_threshold and eye_closed:
-                        eye_closed = False
-                        blink_counter += 1
-                        blink_detected = True
-                    
                     # Detect head movement
                     if prev_landmarks:
                         head_movement = detect_head_movement(landmarks, prev_landmarks)
+                        
+                        # Only process movement if enough time has passed since last action
+                        current_time = time.time()
+                        if current_time - last_action_time >= action_cooldown:
+                            # Update movement buffer
+                            if head_movement != "none":
+                                movement_buffer.append(head_movement)
+                                if len(movement_buffer) > buffer_size:
+                                    movement_buffer.pop(0)
+                            
+                            # Check if any recent movement matches the current action
+                            if movement_buffer and current_action:
+                                if (current_action == "left" and "left" in movement_buffer) or \
+                                   (current_action == "right" and "right" in movement_buffer) or \
+                                   (current_action == "nod" and ("up" in movement_buffer or "down" in movement_buffer)):
+                                    movement_complete_time = time.time()
+                                    action_complete = True
+                            
+                            # Keep the movement state active for the duration
+                            if movement_complete_time and (time.time() - movement_complete_time) < movement_complete_duration:
+                                action_complete = True
+                            else:
+                                movement_complete_time = None
+                                
                     prev_landmarks = landmarks
                     
-                    # Handle challenge-response system
-                    if current_challenge is None:
-                        current_challenge = random.choice(CHALLENGES)
-                        challenge_start_time = time.time()
-                        challenge_complete = False
-                    elif not challenge_complete:
-                        # Check if challenge is completed based on the type
-                        if "blink" in current_challenge and blink_detected:
-                            challenge_complete = True
-                        elif "left" in current_challenge and head_movement == "left":
-                            challenge_complete = True
-                        elif "right" in current_challenge and head_movement == "right":
-                            challenge_complete = True
-                        elif "nod" in current_challenge and head_movement in ["up", "down"]:
-                            challenge_complete = True
-                        
-                        # Check for timeout
-                        if time.time() - challenge_start_time > challenge_timeout:
-                            current_challenge = random.choice(CHALLENGES)
-                            challenge_start_time = time.time()
+                    # Handle action completion
+                    if action_complete and current_action:
+                        completed_actions.add(current_action)
+                        action_complete = False
+                        current_action = None
+                        movement_buffer = []  # Clear buffer after action completion
+                        last_action_time = time.time()  # Update last action time
+                        print(f"Action completed. Total completed: {len(completed_actions)}/3")
                     
-                    # Display the current challenge
-                    cv2.putText(frame, current_challenge, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    # Get next action if current one is complete or not set
+                    if not current_action and len(completed_actions) < len(required_actions):
+                        remaining_actions = [a for a in required_actions if a not in completed_actions]
+                        if remaining_actions:
+                            current_action = remaining_actions[0]
+                            action_start_time = time.time()
+                            print(f"New action: {current_action}")
                     
-                    # Display liveness indicators
-                    cv2.putText(frame, f"Depth Check: {'Passed' if depth_check_passed else 'Failed'}", (10, 60), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0) if depth_check_passed else (0, 0, 255), 2)
-                    cv2.putText(frame, f"Blinks: {blink_counter}", (10, 90), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-                    cv2.putText(frame, f"Movement: {head_movement}", (10, 120), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-                
-                # Decode QR codes
-                decoded_objects = decode(frame, symbols=[ZBarSymbol.QRCODE])
-                
-                for obj in decoded_objects:
-                    qr_data = obj.data.decode('utf-8') if obj.data else None
-                    if qr_data and qr_data not in already_marked and qr_data in face_data:
-                        face_locations = face_recognition.face_locations(frame)
-                        face_encodings = face_recognition.face_encodings(frame, face_locations)
+                    # Check for action timeout
+                    if current_action and time.time() - action_start_time > action_timeout:
+                        print(f"Action timeout: {current_action}")
+                        current_action = None
+                        action_start_time = None
+                        movement_buffer = []
+                    
+                    # Display current status
+                    if current_person:
+                        cv2.putText(frame, f"Identified: {current_person}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                        cv2.putText(frame, f"Completed Actions: {len(completed_actions)}/3", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                        if current_action:
+                            cv2.putText(frame, f"Current Action: Turn head {current_action}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                            # Show cooldown timer
+                            time_left = max(0, action_cooldown - (time.time() - last_action_time))
+                            if time_left > 0:
+                                cv2.putText(frame, f"Next action in: {time_left:.1f}s", (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+                    else:
+                        cv2.putText(frame, "Please position your face for identification", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    
+                    cv2.putText(frame, f"Movement: {head_movement}", (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
 
-                        for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
-                            # Compare the face encoding with known face encodings
-                            matches = face_recognition.compare_faces([face_data[qr_data]], face_encoding)
-                            name = "Unknown"
+                    # Perform face recognition
+                    face_locations = face_recognition.face_locations(rgb_frame)
+                    face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
 
-                            if matches[0]:
-                                # Only mark attendance if liveness checks pass
-                                if depth_check_passed and challenge_complete:
-                                    name = qr_data
+                    for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
+                        # Compare with all known faces
+                        matches = face_recognition.compare_faces(list(face_data.values()), face_encoding)
+                        name = "Unknown"
+                        face_distances = face_recognition.face_distance(list(face_data.values()), face_encoding)
+                        best_match_index = np.argmin(face_distances)
+
+                        if matches[best_match_index] and face_distances[best_match_index] < 0.6:  # More strict matching
+                            name = list(face_data.keys())[best_match_index]
+                            
+                            # If we haven't identified a person yet or if it's the same person
+                            if current_person is None or current_person == name:
+                                current_person = name
+                                
+                                # If all actions are completed, mark attendance
+                                if len(completed_actions) == len(required_actions) and name not in already_marked:
                                     print(f"Attendance marked for: {name}")
-                                    already_marked.add(qr_data)
-
-                                    # Store attendance data in the database
+                                    already_marked.add(name)
                                     c.execute("INSERT INTO attendance (name) VALUES (?)", (name,))
-                                    conn.commit()  # Commit the changes
-                                else:
-                                    name = f"{qr_data} (SPOOFING DETECTED)"
-                                    print(f"Spoofing attempt detected for: {qr_data}")
+                                    conn.commit()
+                                    # Reset for next person
+                                    current_person = None
+                                    completed_actions = set()
+                            elif name in already_marked:
+                                name = f"{name} (Already Marked)"
+                            else:
+                                name = f"{name} (Complete Actions)"
 
-                            # Draw a rectangle and label around the face
-                            cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
-                            font = cv2.FONT_HERSHEY_DUPLEX
-                            cv2.putText(frame, name, (left + 6, bottom - 6), font, 0.5, (255, 255, 255), 1)
+                        # Draw a rectangle and label around the face
+                        cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
+                        font = cv2.FONT_HERSHEY_DUPLEX
+                        cv2.putText(frame, name, (left + 6, bottom - 6), font, 0.5, (255, 255, 255), 1)
 
                 cv2.imshow("Attendance System", frame)
 
