@@ -4,26 +4,38 @@ from pyzbar.pyzbar import decode
 from pyzbar.pyzbar import ZBarSymbol
 import face_recognition
 import pickle
-import sqlite3
 import os
 import random
 import time
 import numpy as np
 import mediapipe as mp
+from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Initialize Supabase client
+supabase: Client = create_client(
+    os.getenv("SUPABASE_URL"),
+    os.getenv("SUPABASE_KEY")
+)
 
 class attend:
     def startprocess():
-        # Establish a connection to the database (or create a new one if it doesn't exist)
-        conn = sqlite3.connect('attendance.db')
-        c = conn.cursor()
-
-        # Create a table to store attendance data with the correct schema
-        c.execute('''CREATE TABLE IF NOT EXISTS attendance
-                    (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-
-        # Commit the changes and close the connection
-        conn.commit()
-        conn.close()
+        # Check if attendance table exists
+        try:
+            supabase.table('attendance').select('*').limit(1).execute()
+        except Exception as e:
+            print("Error: Attendance table not found in Supabase. Please create the table with the following schema:")
+            print("""
+            CREATE TABLE attendance (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+            """)
+            return
 
         # Load face recognition data from the file
         pickle_path = os.path.join('pickle_files', 'face_data.pkl')
@@ -126,10 +138,6 @@ class attend:
         
         # Function to capture video from webcam, decode QR codes, perform face recognition, and mark attendance
         def mark_attendance():
-            # Open the database connection outside the loop
-            conn = sqlite3.connect('attendance.db')
-            c = conn.cursor()
-
             cap = cv2.VideoCapture(0)
             already_marked = set()  # To prevent duplicate entries
             
@@ -250,15 +258,27 @@ class attend:
                             if current_person is None or current_person == name:
                                 current_person = name
                                 
-                                # If all actions are completed, mark attendance
-                                if len(completed_actions) == len(required_actions) and name not in already_marked:
-                                    print(f"Attendance marked for: {name}")
-                                    already_marked.add(name)
-                                    c.execute("INSERT INTO attendance (name) VALUES (?)", (name,))
-                                    conn.commit()
+                                # Check if all required actions are completed
+                                if len(completed_actions) == len(required_actions):
+                                    # Mark attendance in Supabase
+                                    if name not in already_marked:
+                                        try:
+                                            supabase.table('attendance').insert({
+                                                'name': name,
+                                                'timestamp': 'now()'
+                                            }).execute()
+                                            already_marked.add(name)
+                                            print(f"Attendance marked for {name}")
+                                        except Exception as e:
+                                            print(f"Error marking attendance: {str(e)}")
+                                    
                                     # Reset for next person
                                     current_person = None
                                     completed_actions = set()
+                                    current_action = None
+                                    action_start_time = None
+                                    movement_buffer = []
+                                    last_action_time = 0
                             elif name in already_marked:
                                 name = f"{name} (Already Marked)"
                             else:
@@ -273,9 +293,6 @@ class attend:
 
                 if cv2.waitKey(1) & 0xFF == ord('q'):  # Press 'q' to exit
                     break
-
-            # Close the connection after the loop ends
-            conn.close()
 
             cap.release()
             cv2.destroyAllWindows()
