@@ -7,3 +7,4 @@ numpy==1.26.4
 mediapipe==0.10.9
 supabase-py==2.3.4
 python-dotenv==1.0.1 
+tabulate
