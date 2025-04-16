@@ -39,17 +39,12 @@ pip install -r requirements.txt
 
 ### 1. Setting up Face Data
 
-1. Create a directory named `classroom` in the root of the repository
-2. Add student photos to this directory with the naming format: `student_name.jpg`
-3. Run the face data generation script:
-   ```bash
-   python pickle_and_qr.py
-   ```
-4. Enter the number of students when prompted
-5. For each student, enter their name exactly as it appears in their photo filename
-6. The script will:
-   - Generate QR codes for each student (saved in `qr_codes/` directory in the repository root)
-   - Create a `face_data.pkl` file containing face encodings
+1. Run register_face.py to capture image of student
+2. Run create_face_data.py:
+3. Enter the name of student exactly as it appears in their photo filename
+4. The script will:
+   - Create image encodings using face_recognition module
+   - Store it in `face_data.pkl` file 
 
 ### 2. Running the Application
 
@@ -61,7 +56,6 @@ pip install -r requirements.txt
    - Open your webcam
    - Present random liveness challenges (blink, turn head, etc.)
    - Analyze facial depth to detect spoofing attempts
-   - Scan for QR codes
    - Perform face recognition
    - Mark attendance only when all verification steps pass
 3. Press 'q' to exit the application
@@ -75,20 +69,7 @@ pip install -r requirements.txt
 
 - `face_data.pkl`: Stores face recognition data
 - `attendance.db`: SQLite database for attendance records
-- `qr_codes/`: Directory containing generated QR codes (in repository root)
 - `classroom/`: Directory for student photos (in repository root)
-
-## Database Schema
-
-The database contains a table named `attendance` with the following structure:
-
-```sql
-CREATE TABLE attendance (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-```
 
 ## Troubleshooting
 
@@ -97,12 +78,7 @@ CREATE TABLE attendance (
    - Check that face is clearly visible in the photo
    - Verify photo naming matches exactly
 
-2. If QR codes don't scan:
-   - Ensure good lighting
-   - Hold the QR code steady
-   - Check that the QR code is not damaged
-
-3. If anti-spoofing checks fail:
+2. If anti-spoofing checks fail:
    - Make sure there's sufficient lighting for depth detection
    - Follow the challenge instructions carefully
    - Ensure your face is clearly visible to the camera
